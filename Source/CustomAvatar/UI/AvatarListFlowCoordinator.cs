@@ -1,21 +1,20 @@
-using System;
 using System.Linq;
 using BeatSaberMarkupLanguage;
+using CustomAvatar.Utilities;
 using HMUI;
-using IPA.Utilities;
 using UnityEngine;
 
 namespace CustomAvatar.UI
 {
-    class AvatarListFlowCoordinator : FlowCoordinator
+    internal class AvatarListFlowCoordinator : FlowCoordinator
     {
-        private GameObject mainScreen;
-        private Vector3 mainScreenScale;
+        private GameObject _mainScreen;
+        private Vector3 _mainScreenScale;
 
         protected override void DidActivate(bool firstActivation, ActivationType activationType)
         {
-            mainScreen = GameObject.Find("MainScreen");
-            mainScreenScale = mainScreen.transform.localScale;
+            _mainScreen = GameObject.Find("MainScreen");
+            _mainScreenScale = _mainScreen.transform.localScale;
 
             showBackButton = true;
 
@@ -29,15 +28,15 @@ namespace CustomAvatar.UI
 
                 ProvideInitialViewControllers(contentViewController, leftViewController, rightViewController);
                 
-                mainScreen.transform.localScale = Vector3.zero;
+                _mainScreen.transform.localScale = Vector3.zero;
             }
         }
 
         protected override void BackButtonWasPressed(ViewController topViewController)
         {
-            mainScreen.transform.localScale = mainScreenScale;
+            _mainScreen.transform.localScale = _mainScreenScale;
             var mainFlowCoordinator = Resources.FindObjectsOfTypeAll<MainFlowCoordinator>().First();
-            mainFlowCoordinator.InvokePrivateMethod("DismissFlowCoordinator", new object[] { this, null, false });
+            mainFlowCoordinator.InvokePrivateMethod("DismissFlowCoordinator", this, null, false);
         }
 
         protected override void DidDeactivate(DeactivationType deactivationType) { }

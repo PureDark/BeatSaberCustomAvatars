@@ -1,18 +1,15 @@
 using UnityEngine;
-using UnityEngine.XR;
 
 namespace CustomAvatar.Tracking
 {
     internal class TrackedDeviceState
     {
-        public XRNodeState NodeState { get; set; }
-        public Vector3 Position { get; set; }
-        public Quaternion Rotation { get; set; }
-        public bool Found { get; set; }
-
-        public override string ToString()
-        {
-            return $"TrackedDeviceState({{Position={Position}, Rotation={Rotation}, Exists={Found}}})";
-        }
+        public string name { get; set; }
+        public string serialNumber { get; set; }
+        public Vector3 position { get; set; }
+        public Quaternion rotation { get; set; }
+        public bool found { get; set; }
+        public bool tracked { get; set; }
+        public TrackedDeviceRole role { get; set; }
     }
 }

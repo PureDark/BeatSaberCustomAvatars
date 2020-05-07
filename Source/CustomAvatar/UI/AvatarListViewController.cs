@@ -1,37 +1,60 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Reflection;
 using BeatSaberMarkupLanguage.Attributes;
 using BeatSaberMarkupLanguage.Components;
 using BeatSaberMarkupLanguage.ViewControllers;
+using CustomAvatar.Avatar;
+using CustomAvatar.Utilities;
 using HMUI;
-using IPA.Utilities;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace CustomAvatar.UI
 {
-    public class AvatarListViewController : BSMLResourceViewController, TableView.IDataSource
+    internal class AvatarListViewController : BSMLResourceViewController, TableView.IDataSource
     {
         private const string kTableCellReuseIdentifier = "CustomAvatarsTableCell";
 
-        public override string ResourceName => "CustomAvatar.Views.AvatarListViewController.bsml";
+        public override string ResourceName => "CustomAvatar.Views.AvatarList.bsml";
 
         [UIComponent("avatar-list")] public CustomListTableData avatarList;
         [UIComponent("up-button")] public Button upButton;
         [UIComponent("down-button")] public Button downButton;
 
-        private List<CustomAvatar> _avatars = new List<CustomAvatar>();
+        private readonly List<AvatarListItem> _avatars = new List<AvatarListItem>();
         private LevelListTableCell _tableCellTemplate;
+
+        private Texture2D _blankAvatarIcon;
+        private Texture2D _noAvatarIcon;
         
         protected override void DidActivate(bool firstActivation, ActivationType type)
         {
             base.DidActivate(firstActivation, type);
 
             AvatarManager.instance.avatarChanged += OnAvatarChanged;
+            
+            _blankAvatarIcon = LoadTextureFromResource("CustomAvatar.Resources.mystery-man.png");
+            _noAvatarIcon = LoadTextureFromResource("CustomAvatar.Resources.ban.png");
 
             if (firstActivation) FirstActivation();
+        }
+
+        private Texture2D LoadTextureFromResource(string resourceName)
+        {
+            Texture2D texture = new Texture2D(0, 0);
+
+            using (Stream textureStream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
+            {
+                byte[] textureBytes = new byte[textureStream.Length];
+                textureStream.Read(textureBytes, 0, (int) textureStream.Length);
+                texture.LoadImage(textureBytes);
+            }
+
+            return texture;
         }
 
         private void FirstActivation()
@@ -42,32 +65,29 @@ namespace CustomAvatar.UI
             avatarList.tableView.SetPrivateField("_pageDownButton", downButton);
             avatarList.tableView.SetPrivateField("_hideScrollButtonsIfNotNeeded", false);
 
-            TableViewScroller scroller = avatarList.tableView.GetPrivateField<TableViewScroller>("_scroller");
+            TableViewScroller scroller = avatarList.tableView.GetPrivateField<TableView, TableViewScroller>("_scroller");
 
             upButton.onClick.AddListener(() =>
             {
                 scroller.PageScrollUp();
-                avatarList.tableView.InvokePrivateMethod("RefreshScrollButtons", false);
+                avatarList.tableView.RefreshScrollButtons(false);
             });
 
             downButton.onClick.AddListener(() =>
             {
                 scroller.PageScrollDown();
-                avatarList.tableView.InvokePrivateMethod("RefreshScrollButtons", false);
+                avatarList.tableView.RefreshScrollButtons(false);
             });
             
             avatarList.tableView.dataSource = this;
+
+            _avatars.Add(new AvatarListItem("No Avatar", _noAvatarIcon));
             
             AvatarManager.instance.GetAvatarsAsync(avatar =>
             {
-                Plugin.logger.Info("Loaded avatar " + avatar.descriptor.name);
-
-                _avatars.Add(avatar);
+                _avatars.Add(new AvatarListItem(avatar));
 
                 ReloadData();
-            }, ex =>
-            {
-                Plugin.logger.Error("Failed to load avatar: " + ex.Message);
             });
         }
 
@@ -79,12 +99,12 @@ namespace CustomAvatar.UI
         }
 
         
-        // ReSharper disable UnusedMember.Local
+        // ReSharper disable once UnusedMember.Local
         // ReSharper disable once UnusedParameter.Local
         [UIAction("avatar-click")]
         private void OnAvatarClicked(TableView table, int row)
         {
-            AvatarManager.instance.SwitchToAvatar(_avatars[row]);
+            AvatarManager.instance.SwitchToAvatar(_avatars[row].avatar);
         }
 
         private void OnAvatarChanged(SpawnedAvatar avatar)
@@ -94,9 +114,15 @@ namespace CustomAvatar.UI
 
         private void ReloadData()
         {
-            _avatars.Sort((a, b) => string.Compare(a.descriptor.name, b.descriptor.name, StringComparison.CurrentCulture));
+            _avatars.Sort((a, b) =>
+            {
+                if (a.avatar == null) return -1;
+                if (b.avatar == null) return 1;
 
-            int currentRow = _avatars.FindIndex(a => a.fullPath == AvatarManager.instance.currentlySpawnedAvatar?.customAvatar.fullPath);
+                return string.Compare(a.name, b.name, StringComparison.CurrentCulture);
+            });
+
+            int currentRow = _avatars.FindIndex(a => a.avatar?.fullPath == AvatarManager.instance.currentlySpawnedAvatar?.avatar.fullPath);
             
             avatarList.tableView.ReloadData();
             avatarList.tableView.ScrollToCellWithIdx(currentRow, TableViewScroller.ScrollPositionType.Center, true);
@@ -121,23 +147,22 @@ namespace CustomAvatar.UI
             {
                 tableCell = Instantiate(_tableCellTemplate);
 
-                foreach (var image in tableCell.GetPrivateField<UnityEngine.UI.Image[]>("_beatmapCharacteristicImages"))
+                foreach (var image in tableCell.GetPrivateField<LevelListTableCell, UnityEngine.UI.Image[]>("_beatmapCharacteristicImages"))
                 {
                     DestroyImmediate(image);
                 }
 
-                tableCell.SetPrivateField("_beatmapCharacteristicAlphas", new float[0]);
                 tableCell.SetPrivateField("_beatmapCharacteristicImages", new UnityEngine.UI.Image[0]);
-                tableCell.GetPrivateField<RawImage>("_favoritesBadgeImage").enabled = false;
+                tableCell.GetPrivateField<LevelListTableCell, RawImage>("_favoritesBadgeImage").enabled = false;
 
                 tableCell.reuseIdentifier = kTableCellReuseIdentifier;
             }
 
-            CustomAvatar avatar = _avatars[idx];
+            AvatarListItem avatar = _avatars[idx];
 
-            tableCell.GetPrivateField<TextMeshProUGUI>("_songNameText").text = avatar.descriptor.name;
-            tableCell.GetPrivateField<TextMeshProUGUI>("_authorText").text = avatar.descriptor.author;
-            tableCell.GetPrivateField<RawImage>("_coverRawImage").texture = avatar.descriptor.cover?.texture ?? Texture2D.blackTexture;
+            tableCell.GetPrivateField<LevelListTableCell, TextMeshProUGUI>("_songNameText").text = avatar.name;
+            tableCell.GetPrivateField<LevelListTableCell, TextMeshProUGUI>("_authorText").text = avatar.author;
+            tableCell.GetPrivateField<LevelListTableCell, RawImage>("_coverRawImage").texture = avatar.icon ?? _blankAvatarIcon;
 
             return tableCell;
         }

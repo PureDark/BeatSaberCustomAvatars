@@ -1,7 +1,6 @@
 extern alias BeatSaberFinalIK;
 
 using System;
-using System.Linq;
 using System.Reflection;
 using CustomAvatar;
 using BeatSaberFinalIK::RootMotion;
@@ -11,23 +10,13 @@ using UnityEngine.Events;
 using UnityEngine.Serialization;
 
 // ReSharper disable InconsistentNaming
-// ReSharper disable NotAccessedField.Global
 // ReSharper disable once CheckNamespace
 #pragma warning disable CS0649
 namespace AvatarScriptPack
 {
     [Obsolete("Use VRIKManager")]
-    class IKManagerAdvanced : MonoBehaviour
+    internal class IKManagerAdvanced : IKManager
     {
-        [Space(5)]
-        [Header("IK Targets")]
-        [Tooltip("The head target.")]
-        public Transform HeadTarget;
-        [Tooltip("The hand target.")]
-        public Transform LeftHandTarget;
-        [Tooltip("The hand target.")]
-        public Transform RightHandTarget;
-
         [Space(5)]
         [Header("Full Body Tracking")]
         [Tooltip("The pelvis target, useful with seated rigs.")]
@@ -254,8 +243,10 @@ namespace AvatarScriptPack
         [Tooltip("Called when the right foot has finished a step")]
         public UnityEvent Locomotion_onRightFootstep = new UnityEvent();
 
-        public void Start()
+        public override void Start()
         {
+            Plugin.logger.Warn("Avatar is using the legacy IKManagerAdvanced; please migrate to VRIKManager");
+
             VRIKManager vrikManager = gameObject.AddComponent<VRIKManager>();
 
             vrikManager.solver_spine_headTarget = this.HeadTarget;
@@ -269,7 +260,7 @@ namespace AvatarScriptPack
                 string[] propertyName = fieldInfo.Name.Split('_');
                 var value = fieldInfo.GetValue(this);
 
-                if (propertyName.Count() > 1)
+                if (propertyName.Length > 1)
                 {
                     if ("Spine" == propertyName[0])
                     {

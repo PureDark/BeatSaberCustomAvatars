@@ -8,14 +8,16 @@ using UnityEngine;
 namespace AvatarScriptPack
 {
     [Obsolete("Use VRIKManager")]
-    class IKManager : MonoBehaviour
+    internal class IKManager : MonoBehaviour
     {
         public Transform HeadTarget;
         public Transform LeftHandTarget;
         public Transform RightHandTarget;
 
-        public void Start()
+        public virtual void Start()
         {
+            Plugin.logger.Warn("Avatar is still using the legacy IKManager; please migrate to VRIKManager");
+
             var vrikManager = gameObject.AddComponent<VRIKManager>();
 
             vrikManager.solver_spine_headTarget = HeadTarget;

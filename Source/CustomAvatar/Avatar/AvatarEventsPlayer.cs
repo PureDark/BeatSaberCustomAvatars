@@ -3,9 +3,9 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-namespace CustomAvatar
+namespace CustomAvatar.Avatar
 {
-    public class AvatarEventsPlayer : MonoBehaviour
+    internal class AvatarEventsPlayer : MonoBehaviour
     {
         private EventManager _eventManager;
 
@@ -156,12 +156,12 @@ namespace CustomAvatar
             }
         }
 
-        private void SaberStartCollide(Saber.SaberType saber)
+        private void SaberStartCollide(SaberType saber)
         {
             _eventManager?.SaberStartColliding?.Invoke();
         }
 
-        private void SaberEndCollide(Saber.SaberType saber)
+        private void SaberEndCollide(SaberType saber)
         {
             _eventManager?.SaberStopColliding?.Invoke();
         }

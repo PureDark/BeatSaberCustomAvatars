@@ -3,58 +3,63 @@ using IPA;
 using System;
 using System.Linq;
 using BeatSaberMarkupLanguage.MenuButtons;
+using CustomAvatar.Lighting;
 using CustomAvatar.UI;
 using CustomAvatar.Utilities;
-using DynamicOpenVR;
-using DynamicOpenVR.IO;
-using IPA.Utilities;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Zenject;
-using Input = UnityEngine.Input;
 using Logger = IPA.Logging.Logger;
+using Object = UnityEngine.Object;
 
 namespace CustomAvatar
 {
-    public class Plugin : IBeatSaberPlugin
+    [Plugin(RuntimeOptions.SingleStartInit)]
+    internal class Plugin
     {
         private GameScenesManager _scenesManager;
-
-        public event Action<Scene> sceneTransitioned;
+        private GameObject _mirrorContainer;
+        
+        public event Action<ScenesTransitionSetupDataSO, DiContainer> sceneTransitionDidFinish;
 
         public static Plugin instance { get; private set; }
 
         public static Logger logger { get; private set; }
 
-        public static SkeletalInput leftHandAnimAction;
-        public static SkeletalInput rightHandAnimAction;
-
-        public Plugin()
+        [Init]
+        public Plugin(Logger logger)
         {
-            if (OpenVRActionManager.isRunning)
-            {
-                OpenVRActionManager actionManager = OpenVRActionManager.instance;
-
-                leftHandAnimAction = actionManager.RegisterAction(new SkeletalInput("/actions/customavatars/in/lefthandanim"));
-                rightHandAnimAction = actionManager.RegisterAction(new SkeletalInput("/actions/customavatars/in/righthandanim"));
-            }
-        }
-
-        public void Init(Logger logger)
-        {
-            Plugin.logger = logger;
             instance = this;
+            Plugin.logger = logger;
             
-            SettingsManager.LoadSettings();
-            AvatarManager.instance.LoadAvatarFromSettingsAsync();
+            SettingsManager.Load();
+            BeatSaberEvents.ApplyPatches();
         }
 
-        public void OnApplicationQuit()
+        [OnStart]
+        public void OnStart()
+        {
+            SceneManager.sceneLoaded += OnSceneLoaded;
+
+            KeyboardInputHandler keyboardInputHandler = new GameObject(nameof(KeyboardInputHandler)).AddComponent<KeyboardInputHandler>();
+            Object.DontDestroyOnLoad(keyboardInputHandler.gameObject);
+
+            ShaderLoader shaderLoader = new GameObject(nameof(ShaderLoader)).AddComponent<ShaderLoader>();
+            Object.DontDestroyOnLoad(shaderLoader.gameObject);
+        }
+
+        [OnExit]
+        public void OnExit()
         {
             if (_scenesManager != null)
+            {
+                _scenesManager.transitionDidFinishEvent -= sceneTransitionDidFinish;
                 _scenesManager.transitionDidFinishEvent -= SceneTransitionDidFinish;
+            }
 
-            SettingsManager.SaveSettings();
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+
+            SettingsManager.Save();
         }
 
         public void OnSceneLoaded(Scene newScene, LoadSceneMode mode)
@@ -65,24 +70,37 @@ namespace CustomAvatar
 
                 if (_scenesManager != null)
                 {
+                    _scenesManager.transitionDidFinishEvent += sceneTransitionDidFinish;
                     _scenesManager.transitionDidFinishEvent += SceneTransitionDidFinish;
-                    _scenesManager.transitionDidFinishEvent += (setupData, container) => sceneTransitioned?.Invoke(SceneManager.GetActiveScene());
                 }
             }
 
-            if (newScene.name == "HealthWarning" && SettingsManager.settings.calibrateFullBodyTrackingOnStart)
+            if (newScene.name == "PCInit")
             {
-                AvatarManager.instance.avatarTailor.CalibrateFullBodyTracking();
+                SetUpLighting();
+                AvatarManager.instance.LoadAvatarFromSettingsAsync();
             }
 
             if (newScene.name == "MenuCore")
             {
-                MenuButtons.instance.RegisterButton(new MenuButton("Avatars", () =>
+                try
                 {
-                    var mainFlowCoordinator = Resources.FindObjectsOfTypeAll<MainFlowCoordinator>().First();
-                    var flowCoordinator = new GameObject("AvatarListFlowCoordinator").AddComponent<AvatarListFlowCoordinator>();
-                    mainFlowCoordinator.InvokePrivateMethod("PresentFlowCoordinator", flowCoordinator, null, true, false);
-                }));
+                    MenuButtons.instance.RegisterButton(new MenuButton("Avatars", () =>
+                    {
+                        var mainFlowCoordinator = Resources.FindObjectsOfTypeAll<MainFlowCoordinator>().First();
+                        var flowCoordinator = new GameObject(nameof(AvatarListFlowCoordinator)).AddComponent<AvatarListFlowCoordinator>();
+                        mainFlowCoordinator.InvokePrivateMethod("PresentFlowCoordinator", flowCoordinator, null, true, false);
+                    }));
+                }
+                catch (Exception)
+                {
+                    logger.Warn("Failed to add menu button, spawning mirror instead");
+
+                    _mirrorContainer = new GameObject();
+                    Object.DontDestroyOnLoad(_mirrorContainer);
+                    Vector2 mirrorSize = SettingsManager.settings.mirror.size;
+                    MirrorHelper.CreateMirror(new Vector3(0, mirrorSize.y / 2, -1.5f), Quaternion.Euler(-90f, 180f, 0), mirrorSize, _mirrorContainer.transform);
+                }
             }
         }
 
@@ -110,38 +128,6 @@ namespace CustomAvatar
             }
         }
 
-        public void OnUpdate()
-        {
-            AvatarManager avatarManager = AvatarManager.instance;
-
-            if (Input.GetKeyDown(KeyCode.PageDown))
-            {
-                avatarManager.SwitchToNextAvatar();
-            }
-            else if (Input.GetKeyDown(KeyCode.PageUp))
-            {
-                avatarManager.SwitchToPreviousAvatar();
-            }
-            else if (Input.GetKeyDown(KeyCode.Home))
-            {
-                SettingsManager.settings.isAvatarVisibleInFirstPerson = !SettingsManager.settings.isAvatarVisibleInFirstPerson;
-                logger.Info($"{(SettingsManager.settings.isAvatarVisibleInFirstPerson ? "Enabled" : "Disabled")} first person visibility");
-                avatarManager.currentlySpawnedAvatar?.OnFirstPersonEnabledChanged();
-            }
-            else if (Input.GetKeyDown(KeyCode.End))
-            {
-                SettingsManager.settings.resizeMode = (AvatarResizeMode) (((int)SettingsManager.settings.resizeMode + 1) % 3);
-                logger.Info($"Set resize mode to {SettingsManager.settings.resizeMode}");
-                avatarManager.ResizeCurrentAvatar();
-            }
-            else if (Input.GetKeyDown(KeyCode.Insert))
-            {
-                SettingsManager.settings.enableFloorAdjust = !SettingsManager.settings.enableFloorAdjust;
-                logger.Info($"{(SettingsManager.settings.enableFloorAdjust ? "Enabled" : "Disabled")} floor adjust");
-                avatarManager.ResizeCurrentAvatar();
-            }
-        }
-
         private void SetCameraCullingMask(Camera camera)
         {
             logger.Debug("Adding third person culling mask to " + camera.name);
@@ -149,12 +135,24 @@ namespace CustomAvatar
             camera.cullingMask &= ~(1 << AvatarLayers.OnlyInThirdPerson);
         }
 
-        public void OnFixedUpdate() { }
+        private void SetUpLighting()
+        {
+            if (SettingsManager.settings.lighting.enabled)
+            {
+                var lighting = new LightingRig();
 
-        public void OnSceneUnloaded(Scene scene) { }
+                foreach (Settings.LightDefinition lightDefinition in SettingsManager.settings.lighting.lights)
+                {
+                    lighting.AddLight(lightDefinition);
+                }
 
-        public void OnActiveSceneChanged(Scene prevScene, Scene nextScene) { }
-
-        public void OnApplicationStart() { }
+                if (SettingsManager.settings.lighting.castShadows)
+                {
+                    QualitySettings.shadows = ShadowQuality.All;
+                    QualitySettings.shadowResolution = SettingsManager.settings.lighting.shadowResolution;
+                    QualitySettings.shadowDistance = 10;
+                }
+            }
+        }
     }
 }

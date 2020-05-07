@@ -82,6 +82,9 @@
     <Compile Include="..\CustomAvatar\EventManager.cs">
       <Link>EventManager.cs</Link>
     </Compile>
+    <Compile Include="..\CustomAvatar\FirstPersonExclusion.cs">
+      <Link>FirstPersonExclusion.cs</Link>
+    </Compile>
     <Compile Include="..\CustomAvatar\PoseManager.cs">
       <Link>PoseManager.cs</Link>
     </Compile>
@@ -91,8 +94,8 @@
     <Compile Include="..\CustomAvatar\VRIKManager.cs">
       <Link>VRIKManager.cs</Link>
     </Compile>
-    <Compile Include="VRIKManagerEditor.cs" />
-    <Compile Include="PoseManagerEditor.cs" />
+    <Compile Include="Editor\VRIKManagerEditor.cs" />
+    <Compile Include="Editor\PoseManagerEditor.cs" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
